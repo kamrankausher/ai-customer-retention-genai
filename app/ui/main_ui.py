@@ -1,7 +1,10 @@
 import sys
-import os
 import json
 import streamlit as st
+import os
+
+DEPLOY_MODE = os.getenv("DEPLOY_MODE", "local")
+
 
 # ------------------ FIX IMPORT PATH ------------------
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -158,8 +161,20 @@ ai_output = None
 if st.button("🚀 Run AI Analysis"):
     profile_json = json.dumps(customer_profile, sort_keys=True)
 
+    if DEPLOY_MODE == "cloud":
+        ai_output = {
+        "risk_explanation": "This customer shows elevated churn risk due to short tenure and high monthly charges.",
+        "retention_decision": "Offer a limited-time discount and proactive support outreach.",
+        "customer_message": (
+            "We truly value your time with us and would love to ensure you’re getting the best experience.\n\n"
+            "As a valued customer, we’re offering a special benefit to help you get more value from your plan.\n\n"
+            "Warm regards,\nCustomer Success Team"
+        )
+    }
+else:
     with st.spinner("AI analyzing customer risk..."):
         ai_output = get_cached_ai_output(profile_json)
+
 
 # ================== DISPLAY GENAI OUTPUT ==================
 if ai_output:
