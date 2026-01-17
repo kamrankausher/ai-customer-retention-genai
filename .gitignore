@@ -1,5 +1,21 @@
+# Virtual environment
 venv/
-__pycache__/
 .env
-*.pyc
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit
+.streamlit/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local test files
+successful/

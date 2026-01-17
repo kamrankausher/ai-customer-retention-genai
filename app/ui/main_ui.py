@@ -1,6 +1,28 @@
+import sys
+import os
+import json
 import streamlit as st
 
-# ================== PAGE CONFIG (ONLY ONCE) ==================
+# ------------------ FIX IMPORT PATH ------------------
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from app.genai.llm_engine import generate_retention_bundle
+
+
+# ------------------ CACHE SAFE GENAI CALL ------------------
+@st.cache_data(show_spinner=False)
+def get_cached_ai_output(profile_json: str) -> dict:
+    """
+    Streamlit-safe cached GenAI call.
+    Uses JSON string to avoid mutable dict issues.
+    """
+    profile_dict = json.loads(profile_json)
+    return generate_retention_bundle(profile_dict)
+
+
+# ================== PAGE CONFIG ==================
 st.set_page_config(
     page_title="AI Customer Retention Intelligence",
     layout="wide",
@@ -82,7 +104,7 @@ with col3:
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-# ================== RISK ANALYSIS ==================
+# ================== RISK ANALYSIS (VISUAL ONLY) ==================
 st.markdown("## 📊 Risk Analysis")
 
 if tenure <= 3 and monthly_charges > 80:
@@ -102,65 +124,81 @@ col1, col2 = st.columns([1, 2])
 
 with col1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(f"<h3 style='color:{risk_color}; text-align:center;'>{risk_level}</h3>", unsafe_allow_html=True)
+    st.markdown(
+        f"<h3 style='color:{risk_color}; text-align:center;'>{risk_level}</h3>",
+        unsafe_allow_html=True
+    )
     st.markdown("<p style='text-align:center;'>Customer churn likelihood</p>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(f"<h4>Churn Probability</h4><h1>{int(churn_prob*100)}%</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Churn Probability</h4><h1>{int(churn_prob * 100)}%</h1>", unsafe_allow_html=True)
     st.progress(churn_prob)
     st.caption("Confidence score based on model prediction")
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-# ================== AI EXPLANATION ==================
-with st.expander("🧠 AI Explanation Panel", expanded=True):
-    reasons = []
-    if tenure <= 3:
-        reasons.append("the customer is very new")
-    if monthly_charges > 80:
-        reasons.append("monthly charges are relatively high")
-    if partner == "No" and dependents == "No":
-        reasons.append("there are no family ties associated with the account")
+# ================== GENAI INPUT ==================
+customer_profile = {
+    "gender": gender,
+    "senior_citizen": senior,
+    "partner": partner,
+    "dependents": dependents,
+    "tenure_months": tenure,
+    "monthly_charges": monthly_charges,
+    "contract_type": "Month-to-month" if tenure < 12 else "Long-term",
+    "support_calls": "High" if tenure < 3 else "Normal"
+}
 
-    explanation = "The model predicts churn risk because " + ", and ".join(reasons) if reasons else \
-        "No strong churn indicators were detected."
+# ================== GENAI EXECUTION ==================
+ai_output = None
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.write(explanation)
-    st.markdown('</div>', unsafe_allow_html=True)
+if st.button("🚀 Run AI Analysis"):
+    profile_json = json.dumps(customer_profile, sort_keys=True)
 
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    with st.spinner("AI analyzing customer risk..."):
+        ai_output = get_cached_ai_output(profile_json)
 
-# ================== AI DECISION ==================
-with st.expander("🎯 AI Decision Panel", expanded=True):
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+# ================== DISPLAY GENAI OUTPUT ==================
+if ai_output:
 
-    if risk_level == "HIGH RISK":
-        st.write("**Immediate retention intervention required.**")
-        st.write("Offer discounts, premium support, and contract upgrades.")
-    elif risk_level == "MEDIUM RISK":
-        st.write("**Preventive engagement recommended.**")
-        st.write("Provide value-added services.")
-    else:
-        st.write("**No action required.** Customer is stable.")
+    risk_explanation = ai_output.get(
+        "risk_explanation",
+        "Explanation unavailable."
+    )
+    retention_decision = ai_output.get(
+        "retention_decision",
+        "No decision available."
+    )
+    customer_message = ai_output.get(
+        "customer_message",
+        "Thank you for being a valued customer."
+    )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    # ------------------ AI EXPLANATION ------------------
+    with st.expander("🧠 AI Explanation Panel", expanded=True):
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.write(risk_explanation)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# ================== RETENTION MESSAGE ==================
-with st.expander("💬 Retention Message Generator", expanded=True):
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-    if risk_level == "HIGH RISK":
-        message = "We value you! Enjoy a special discount and premium support."
-    elif risk_level == "MEDIUM RISK":
-        message = "Unlock additional benefits at no extra cost."
-    else:
-        message = "Thank you for being a loyal customer."
+    # ------------------ AI DECISION ------------------
+    with st.expander("🎯 AI Decision Panel", expanded=True):
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.write(retention_decision)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.text_area("", value=message, height=180)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+    # ------------------ RETENTION MESSAGE ------------------
+    with st.expander("💬 Retention Message Generator", expanded=True):
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.text_area("", value=customer_message, height=200)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+st.caption("Powered by local GenAI • Privacy-safe • No external API calls")
